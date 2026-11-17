@@ -1,0 +1,223 @@
+openapi: 3.1.0
+info:
+  title: Gadget Hub API
+  version: 0.1.0
+  description: Операции с x-status planned будут реализованы на следующих этапах.
+servers:
+  - url: http://127.0.0.1:8080/api/v1
+    description: Express
+  - url: http://127.0.0.1:3000/api/v1
+    description: Прокси Vite
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Проверить доступность сервера
+      responses:
+        '200':
+          description: Сервер отвечает
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {const: ok}
+  /auth/login:
+    post:
+      x-status: planned
+      operationId: login
+      summary: Войти и получить HttpOnly cookie сессии
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string, minLength: 1}
+                password: {type: string, minLength: 1}
+      responses:
+        '200':
+          $ref: '#/components/responses/Session'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          description: Неверный логин или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/logout:
+    post:
+      x-status: planned
+      operationId: logout
+      summary: Завершить текущую сессию
+      responses:
+        '204':
+          description: Сессия завершена и cookie удалена
+  /auth/session:
+    get:
+      x-status: planned
+      operationId: getSession
+      summary: Получить текущего пользователя
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          $ref: '#/components/responses/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /goods:
+    get:
+      x-status: planned
+      operationId: getGoods
+      summary: Получить каталог или публичную подборку
+      security:
+        - {}
+        - sessionCookie: []
+      parameters:
+        - name: collection
+          in: query
+          description: Подборки доступны гостям. Полный каталог требует сессии.
+          schema: {type: string, enum: [hits, new]}
+      responses:
+        '200':
+          description: Список товаров
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /orders:
+    get:
+      x-status: planned
+      operationId: getOrders
+      summary: Получить заказы текущего пользователя
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: История заказов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      x-status: planned
+      operationId: createOrder
+      summary: Рассчитать сумму на сервере и сохранить заказ
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '201':
+          description: Заказ сохранён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gadget_hub_session
+  responses:
+    Session:
+      description: Активная сессия пользователя
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, username]
+            properties:
+              id: {type: string}
+              username: {type: string}
+    InvalidRequest:
+      description: Некорректные данные запроса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Требуется активная сессия
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string}
+    Product:
+      type: object
+      required: [id, name, imageUrl, priceRub, rating, category, color, description, specifications, publishedAt, isNew, isHit]
+      properties:
+        id: {type: integer, minimum: 1}
+        name: {type: string}
+        imageUrl: {type: string}
+        priceRub: {type: integer, minimum: 0}
+        rating: {type: number, minimum: 0, maximum: 5}
+        category: {type: string}
+        color: {type: string}
+        description: {type: string}
+        specifications:
+          type: object
+          additionalProperties: {type: string}
+        publishedAt: {type: string, format: date}
+        isNew: {type: boolean}
+        isHit: {type: boolean}
+    OrderRequest:
+      type: object
+      required: [items, phone, fulfillment, payment, giftWrap]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId: {type: integer, minimum: 1}
+              quantity: {type: integer, minimum: 1}
+        phone: {type: string, minLength: 1}
+        email: {type: string, format: email}
+        fulfillment: {type: string, enum: [pickup, delivery]}
+        address: {type: string, minLength: 1}
+        payment: {type: string, enum: [card, cash]}
+        giftWrap: {type: boolean}
+      if:
+        properties:
+          fulfillment: {const: delivery}
+      then:
+        required: [address]
+    Order:
+      type: object
+      required: [number, createdAt, itemCount, totalRub]
+      properties:
+        number: {type: integer, minimum: 1}
+        createdAt: {type: string, format: date-time}
+        itemCount: {type: integer, minimum: 1}
+        totalRub: {type: integer, minimum: 0}
